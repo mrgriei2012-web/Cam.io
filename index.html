@@ -1,43 +1,66 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ESP Object Detector</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; }
+        #v { width: 100vw; height: 100vh; object-fit: cover; }
+        #c { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; }
+    </style>
 </head>
 <body>
-    <video id="v" autoplay playsinline style="width: 100%;"></video>
-    <canvas id="c" style="position: absolute; top: 0; left: 0;"></canvas>
+    <video id="v" autoplay playsinline></video>
+    <canvas id="c"></canvas>
 
     <script>
-        async function start() {
+        async function run() {
             const v = document.getElementById('v');
             const c = document.getElementById('c');
             const ctx = c.getContext('2d');
-            
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-            v.srcObject = stream;
-            
+
+            // Запрашиваем основную камеру
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: { exact: "environment" } } 
+                });
+                v.srcObject = stream;
+            } catch (err) {
+                // Если нет основной камеры, пробуем любую доступную
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                v.srcObject = stream;
+            }
+
+            // Загружаем нейросеть
             const model = await cocoSsd.load();
             
-            function loop() {
+            // Цикл отрисовки
+            function detect() {
                 model.detect(v).then(preds => {
                     c.width = v.videoWidth;
                     c.height = v.videoHeight;
                     ctx.clearRect(0, 0, c.width, c.height);
                     
                     preds.forEach(p => {
+                        // Рисуем рамку (ESP эффект)
                         ctx.strokeStyle = '#00FF00';
-                        ctx.lineWidth = 3;
+                        ctx.lineWidth = 4;
                         ctx.strokeRect(...p.bbox);
+                        
+                        // Пишем название объекта
                         ctx.fillStyle = '#00FF00';
-                        ctx.fillText(p.class, p.bbox[0], p.bbox[1] - 5);
+                        ctx.font = '20px Arial';
+                        ctx.fillText(p.class, p.bbox[0], p.bbox[1] > 20 ? p.bbox[1] - 5 : 20);
                     });
-                    requestAnimationFrame(loop);
+                    requestAnimationFrame(detect);
                 });
             }
-            loop();
+            detect();
         }
-        start();
+        run();
     </script>
 </body>
 </html>
