@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
+</head>
+<body>
+    <video id="v" autoplay playsinline style="width: 100%;"></video>
+    <canvas id="c" style="position: absolute; top: 0; left: 0;"></canvas>
+
+    <script>
+        async function start() {
+            const v = document.getElementById('v');
+            const c = document.getElementById('c');
+            const ctx = c.getContext('2d');
+            
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            v.srcObject = stream;
+            
+            const model = await cocoSsd.load();
+            
+            function loop() {
+                model.detect(v).then(preds => {
+                    c.width = v.videoWidth;
+                    c.height = v.videoHeight;
+                    ctx.clearRect(0, 0, c.width, c.height);
+                    
+                    preds.forEach(p => {
+                        ctx.strokeStyle = '#00FF00';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(...p.bbox);
+                        ctx.fillStyle = '#00FF00';
+                        ctx.fillText(p.class, p.bbox[0], p.bbox[1] - 5);
+                    });
+                    requestAnimationFrame(loop);
+                });
+            }
+            loop();
+        }
+        start();
+    </script>
+</body>
+</html>
