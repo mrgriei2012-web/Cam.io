@@ -3,16 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP Detector</title>
+    <title>ESP Grid Effect</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; }
+        body { margin: 0; background: #000; overflow: hidden; color: #fff; }
+        /* contain показывает весь кадр целиком */
         #v, #c { 
             position: absolute; top: 0; left: 0; 
             width: 100vw; height: 100vh; 
-            object-fit: contain; /* Чтобы видеть кадр целиком */
+            object-fit: contain; 
             transform-origin: center center;
+            filter: brightness(0.8) contrast(1.2);
         }
         #zoomRange { position: absolute; bottom: 30px; left: 10%; width: 80%; z-index: 100; }
     </style>
@@ -33,45 +35,63 @@
         };
 
         async function run() {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } });
-            v.srcObject = stream;
-            const model = await cocoSsd.load();
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { facingMode: { exact: "environment" } } 
+                });
+                v.srcObject = stream;
+                const model = await cocoSsd.load();
 
-            function detect() {
-                model.detect(v).then(preds => {
-                    // Устанавливаем размеры холста равными размерам видеопотока
-                    c.width = v.videoWidth;
-                    c.height = v.videoHeight;
-                    ctx.clearRect(0, 0, c.width, c.height);
-                    
-                    preds.forEach(p => {
-                        if (p.score > 0.5) {
-                            // 1. Рисуем рамку
-                            ctx.strokeStyle = '#00FF00';
-                            ctx.lineWidth = 6; // Сделал толще для видимости
-                            ctx.strokeRect(...p.bbox);
-                            
-                            // 2. Добавляем текст и фон для него
-                            ctx.fillStyle = '#00FF00';
-                            ctx.font = 'bold 30px Arial';
-                            const text = `${p.class} (${Math.round(p.score*100)}%)`;
-                            
-                            // Рисуем подпись над рамкой
-                            ctx.fillText(text, p.bbox[0], p.bbox[1] > 30 ? p.bbox[1] - 10 : 30);
-                            
-                            // 3. Линия от верха (как вы просили)
+                function detect() {
+                    model.detect(v).then(preds => {
+                        c.width = v.videoWidth;
+                        c.height = v.videoHeight;
+                        ctx.clearRect(0, 0, c.width, c.height);
+                        
+                        // Берем только уверенные объекты
+                        const objects = preds.filter(p => p.score > 0.5);
+
+                        // 1. Рисуем сетку (линии между объектами)
+                        if (objects.length > 1) {
                             ctx.beginPath();
-                            ctx.moveTo(p.bbox[0] + p.bbox[2]/2, 0); // Центр рамки сверху
-                            ctx.lineTo(p.bbox[0] + p.bbox[2]/2, p.bbox[1]);
-                            ctx.strokeStyle = 'rgba(0, 255, 0, 0.5)';
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
                             ctx.lineWidth = 2;
+                            
+                            for (let i = 0; i < objects.length; i++) {
+                                const [x, y, w, h] = objects[i].bbox;
+                                const cx = x + w / 2;
+                                const cy = y + h / 2;
+                                
+                                if (i === 0) ctx.moveTo(cx, cy);
+                                else ctx.lineTo(cx, cy);
+                            }
                             ctx.stroke();
                         }
+
+                        // 2. Рисуем точки и названия
+                        objects.forEach(p => {
+                            const [x, y, w, h] = p.bbox;
+                            const cx = x + w / 2;
+                            const cy = y + h / 2;
+                            
+                            // Точка
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.beginPath();
+                            ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
+                            ctx.fill();
+                            
+                            // Текст
+                            ctx.font = 'bold 20px Arial';
+                            ctx.fillText(p.class, x, y - 10);
+                        });
+                        
+                        requestAnimationFrame(detect);
                     });
-                    requestAnimationFrame(detect);
-                });
+                }
+                detect();
+            } catch (err) {
+                console.error("Ошибка камеры:", err);
             }
-            detect();
         }
         run();
     </script>
