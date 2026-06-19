@@ -3,29 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP Scanner</title>
+    <title>ESP Scanner RU</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; }
-        #v { 
-            position: absolute; top: 0; left: 0; 
-            width: 100vw; height: 100vh; 
-            object-fit: contain; 
-            z-index: 1;
-            filter: brightness(0.8) contrast(1.2);
-        }
-        #c { 
-            position: absolute; top: 0; left: 0; 
-            width: 100vw; height: 100vh; 
-            object-fit: contain; 
-            z-index: 2;
-            pointer-events: none; /* Чтобы касания проходили сквозь холст */
-        }
-        #zoomRange { 
-            position: absolute; bottom: 30px; left: 10%; width: 80%; 
-            z-index: 100; 
-        }
+        #v { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; z-index: 1; filter: brightness(0.8) contrast(1.2); }
+        #c { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; z-index: 2; pointer-events: none; }
+        #zoomRange { position: absolute; bottom: 30px; left: 10%; width: 80%; z-index: 100; }
     </style>
 </head>
 <body>
@@ -38,6 +23,14 @@
         const zoom = document.getElementById('zoomRange');
         const ctx = c.getContext('2d');
 
+        // Словарь перевода
+        const labels = {
+            'person': 'Человек', 'laptop': 'Ноутбук', 'cell phone': 'Телефон',
+            'chair': 'Стул', 'book': 'Книга', 'bottle': 'Бутылка',
+            'bed': 'Кровать', 'cup': 'Чашка', 'mouse': 'Мышь',
+            'keyboard': 'Клавиатура', 'tv': 'Телевизор'
+        };
+
         zoom.oninput = () => {
             v.style.transform = `scale(${zoom.value})`;
             c.style.transform = `scale(${zoom.value})`;
@@ -45,59 +38,43 @@
 
         async function run() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: { exact: "environment" } } 
-                });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } });
                 v.srcObject = stream;
-                
                 const model = await cocoSsd.load();
 
                 function detect() {
                     model.detect(v).then(preds => {
-                        // Подгоняем размер холста под реальный поток
-                        c.width = v.videoWidth;
-                        c.height = v.videoHeight;
+                        c.width = v.videoWidth; c.height = v.videoHeight;
                         ctx.clearRect(0, 0, c.width, c.height);
                         
-                        const objects = preds.filter(p => p.score > 0.4);
+                        const objects = preds.filter(p => p.score > 0.6 && p.class !== 'toilet');
 
-                        // 1. Рисуем сетку (линии)
+                        // Рисуем сетку
                         if (objects.length > 1) {
                             ctx.beginPath();
-                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
                             ctx.lineWidth = 2;
                             for (let i = 0; i < objects.length; i++) {
                                 const [x, y, w, h] = objects[i].bbox;
-                                const cx = x + w / 2;
-                                const cy = y + h / 2;
-                                if (i === 0) ctx.moveTo(cx, cy);
-                                else ctx.lineTo(cx, cy);
+                                const cx = x + w / 2, cy = y + h / 2;
+                                if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
                             }
                             ctx.stroke();
                         }
 
-                        // 2. Рисуем рамки и текст
+                        // Рисуем объекты
                         objects.forEach(p => {
                             const [x, y, w, h] = p.bbox;
-                            
-                            // Рамка
-                            ctx.strokeStyle = '#FFFFFF';
-                            ctx.lineWidth = 4;
+                            ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3;
                             ctx.strokeRect(x, y, w, h);
-                            
-                            // Текст
-                            ctx.fillStyle = '#FFFFFF';
-                            ctx.font = 'bold 24px Arial';
-                            ctx.fillText(p.class, x, y - 10);
+                            ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 22px Arial';
+                            ctx.fillText(labels[p.class] || p.class, x, y - 10);
                         });
-                        
                         requestAnimationFrame(detect);
                     });
                 }
                 detect();
-            } catch (err) {
-                console.error("Ошибка:", err);
-            }
+            } catch (err) { console.error(err); }
         }
         run();
     </script>
