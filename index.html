@@ -3,20 +3,29 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP Grid Effect</title>
+    <title>ESP Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; color: #fff; }
-        /* contain показывает весь кадр целиком */
-        #v, #c { 
+        body { margin: 0; background: #000; overflow: hidden; }
+        #v { 
             position: absolute; top: 0; left: 0; 
             width: 100vw; height: 100vh; 
             object-fit: contain; 
-            transform-origin: center center;
+            z-index: 1;
             filter: brightness(0.8) contrast(1.2);
         }
-        #zoomRange { position: absolute; bottom: 30px; left: 10%; width: 80%; z-index: 100; }
+        #c { 
+            position: absolute; top: 0; left: 0; 
+            width: 100vw; height: 100vh; 
+            object-fit: contain; 
+            z-index: 2;
+            pointer-events: none; /* Чтобы касания проходили сквозь холст */
+        }
+        #zoomRange { 
+            position: absolute; bottom: 30px; left: 10%; width: 80%; 
+            z-index: 100; 
+        }
     </style>
 </head>
 <body>
@@ -40,48 +49,45 @@
                     video: { facingMode: { exact: "environment" } } 
                 });
                 v.srcObject = stream;
+                
                 const model = await cocoSsd.load();
 
                 function detect() {
                     model.detect(v).then(preds => {
+                        // Подгоняем размер холста под реальный поток
                         c.width = v.videoWidth;
                         c.height = v.videoHeight;
                         ctx.clearRect(0, 0, c.width, c.height);
                         
-                        // Берем только уверенные объекты
-                        const objects = preds.filter(p => p.score > 0.5);
+                        const objects = preds.filter(p => p.score > 0.4);
 
-                        // 1. Рисуем сетку (линии между объектами)
+                        // 1. Рисуем сетку (линии)
                         if (objects.length > 1) {
                             ctx.beginPath();
                             ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
                             ctx.lineWidth = 2;
-                            
                             for (let i = 0; i < objects.length; i++) {
                                 const [x, y, w, h] = objects[i].bbox;
                                 const cx = x + w / 2;
                                 const cy = y + h / 2;
-                                
                                 if (i === 0) ctx.moveTo(cx, cy);
                                 else ctx.lineTo(cx, cy);
                             }
                             ctx.stroke();
                         }
 
-                        // 2. Рисуем точки и названия
+                        // 2. Рисуем рамки и текст
                         objects.forEach(p => {
                             const [x, y, w, h] = p.bbox;
-                            const cx = x + w / 2;
-                            const cy = y + h / 2;
                             
-                            // Точка
-                            ctx.fillStyle = '#FFFFFF';
-                            ctx.beginPath();
-                            ctx.arc(cx, cy, 4, 0, 2 * Math.PI);
-                            ctx.fill();
+                            // Рамка
+                            ctx.strokeStyle = '#FFFFFF';
+                            ctx.lineWidth = 4;
+                            ctx.strokeRect(x, y, w, h);
                             
                             // Текст
-                            ctx.font = 'bold 20px Arial';
+                            ctx.fillStyle = '#FFFFFF';
+                            ctx.font = 'bold 24px Arial';
                             ctx.fillText(p.class, x, y - 10);
                         });
                         
@@ -90,7 +96,7 @@
                 }
                 detect();
             } catch (err) {
-                console.error("Ошибка камеры:", err);
+                console.error("Ошибка:", err);
             }
         }
         run();
