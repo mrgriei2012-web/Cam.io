@@ -3,80 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ESP Scanner RU</title>
+    <title>YOLOv5 Pro Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd"></script>
     <style>
         body { margin: 0; background: #000; overflow: hidden; }
-        #v { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; z-index: 1; filter: brightness(0.8) contrast(1.2); }
+        #v { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; z-index: 1; }
         #c { position: absolute; top: 0; left: 0; width: 100vw; height: 100vh; object-fit: contain; z-index: 2; pointer-events: none; }
-        #zoomRange { position: absolute; bottom: 30px; left: 10%; width: 80%; z-index: 100; }
     </style>
 </head>
 <body>
-    <input type="range" id="zoomRange" min="0.5" max="2.0" step="0.1" value="1.0">
     <video id="v" autoplay playsinline></video>
     <canvas id="c"></canvas>
 
     <script>
         const v = document.getElementById('v'), c = document.getElementById('c');
-        const zoom = document.getElementById('zoomRange');
         const ctx = c.getContext('2d');
-
-        // Словарь перевода
-        const labels = {
+        
+        // Словарь для перевода на русский
+        const labelsRU = {
             'person': 'Человек', 'laptop': 'Ноутбук', 'cell phone': 'Телефон',
             'chair': 'Стул', 'book': 'Книга', 'bottle': 'Бутылка',
-            'bed': 'Кровать', 'cup': 'Чашка', 'mouse': 'Мышь',
-            'keyboard': 'Клавиатура', 'tv': 'Телевизор'
+            'bed': 'Кровать', 'cup': 'Чашка', 'mouse': 'Мышь', 'tv': 'Телевизор',
+            'remote': 'Пульт', 'keyboard': 'Клавиатура', 'adapter': 'Зарядка'
         };
 
-        zoom.oninput = () => {
-            v.style.transform = `scale(${zoom.value})`;
-            c.style.transform = `scale(${zoom.value})`;
-        };
+        async function init() {
+            // 1. Подключение камеры
+            const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            v.srcObject = stream;
+            
+            // 2. Загрузка модели (используем проверенную библиотеку)
+            const model = await cocoSsd.load();
+            
+            function detect() {
+                model.detect(v).then(preds => {
+                    c.width = v.videoWidth; c.height = v.videoHeight;
+                    ctx.clearRect(0, 0, c.width, c.height);
 
-        async function run() {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" } } });
-                v.srcObject = stream;
-                const model = await cocoSsd.load();
-
-                function detect() {
-                    model.detect(v).then(preds => {
-                        c.width = v.videoWidth; c.height = v.videoHeight;
-                        ctx.clearRect(0, 0, c.width, c.height);
-                        
-                        const objects = preds.filter(p => p.score > 0.6 && p.class !== 'toilet');
-
-                        // Рисуем сетку
-                        if (objects.length > 1) {
-                            ctx.beginPath();
-                            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-                            ctx.lineWidth = 2;
-                            for (let i = 0; i < objects.length; i++) {
-                                const [x, y, w, h] = objects[i].bbox;
-                                const cx = x + w / 2, cy = y + h / 2;
-                                if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
-                            }
-                            ctx.stroke();
+                    // Сетка (линии)
+                    if (preds.length > 1) {
+                        ctx.beginPath();
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+                        for (let i = 0; i < preds.length; i++) {
+                            const [x, y, w, h] = preds[i].bbox;
+                            if (i === 0) ctx.moveTo(x + w/2, y + h/2);
+                            else ctx.lineTo(x + w/2, y + h/2);
                         }
+                        ctx.stroke();
+                    }
 
-                        // Рисуем объекты
-                        objects.forEach(p => {
-                            const [x, y, w, h] = p.bbox;
-                            ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3;
-                            ctx.strokeRect(x, y, w, h);
-                            ctx.fillStyle = '#FFFFFF'; ctx.font = 'bold 22px Arial';
-                            ctx.fillText(labels[p.class] || p.class, x, y - 10);
-                        });
-                        requestAnimationFrame(detect);
+                    // Объекты
+                    preds.forEach(p => {
+                        const [x, y, w, h] = p.bbox;
+                        ctx.strokeStyle = '#FFF'; ctx.strokeRect(x, y, w, h);
+                        ctx.fillStyle = '#FFF'; ctx.font = '20px Arial';
+                        // Перевод: если есть в словаре - пишем русское, если нет - английское
+                        ctx.fillText(labelsRU[p.class] || p.class, x, y - 5);
                     });
-                }
-                detect();
-            } catch (err) { console.error(err); }
+                    requestAnimationFrame(detect);
+                });
+            }
+            detect();
         }
-        run();
+        init();
     </script>
 </body>
 </html>
